@@ -28,7 +28,7 @@ import com.facebook.presto.bytecode.expression.BytecodeExpression;
 import com.facebook.presto.bytecode.instruction.LabelNode;
 import com.facebook.presto.operator.JoinHash;
 import com.facebook.presto.operator.JoinHashSupplier;
-import com.facebook.presto.operator.LookupSource;
+import com.facebook.presto.operator.LookupSourceSupplier;
 import com.facebook.presto.operator.PagesHash;
 import com.facebook.presto.operator.PagesHashStrategy;
 import com.facebook.presto.spi.ConnectorSession;
@@ -47,6 +47,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ExecutionError;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
+import org.weakref.jmx.Managed;
+import org.weakref.jmx.Nested;
 
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
@@ -54,7 +56,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
-import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
 import static com.facebook.presto.bytecode.Access.FINAL;
@@ -77,8 +78,10 @@ import static java.util.Objects.requireNonNull;
 
 public class JoinCompiler
 {
-    private final LoadingCache<CacheKey, LookupSourceSupplierFactory> lookupSourceFactories = CacheBuilder.newBuilder().maximumSize(1000).build(
-            new CacheLoader<CacheKey, LookupSourceSupplierFactory>()
+    private final LoadingCache<CacheKey, LookupSourceSupplierFactory> lookupSourceFactories = CacheBuilder.newBuilder()
+            .recordStats()
+            .maximumSize(1000)
+            .build(new CacheLoader<CacheKey, LookupSourceSupplierFactory>()
             {
                 @Override
                 public LookupSourceSupplierFactory load(CacheKey key)
@@ -88,8 +91,10 @@ public class JoinCompiler
                 }
             });
 
-    private final LoadingCache<CacheKey, Class<? extends PagesHashStrategy>> hashStrategies = CacheBuilder.newBuilder().maximumSize(1000).build(
-            new CacheLoader<CacheKey, Class<? extends PagesHashStrategy>>()
+    private final LoadingCache<CacheKey, Class<? extends PagesHashStrategy>> hashStrategies = CacheBuilder.newBuilder()
+            .recordStats()
+            .maximumSize(1000)
+            .build(new CacheLoader<CacheKey, Class<? extends PagesHashStrategy>>()
             {
                 @Override
                 public Class<? extends PagesHashStrategy> load(CacheKey key)
@@ -102,6 +107,20 @@ public class JoinCompiler
     public LookupSourceSupplierFactory compileLookupSourceFactory(List<? extends Type> types, List<Integer> joinChannels)
     {
         return compileLookupSourceFactory(types, joinChannels, Optional.empty());
+    }
+
+    @Managed
+    @Nested
+    public CacheStatsMBean getLookupSourceStats()
+    {
+        return new CacheStatsMBean(lookupSourceFactories);
+    }
+
+    @Managed
+    @Nested
+    public CacheStatsMBean getHashStrategiesStats()
+    {
+        return new CacheStatsMBean(hashStrategies);
     }
 
     public LookupSourceSupplierFactory compileLookupSourceFactory(List<? extends Type> types, List<Integer> joinChannels, Optional<List<Integer>> outputChannels)
@@ -150,9 +169,9 @@ public class JoinCompiler
     {
         Class<? extends PagesHashStrategy> pagesHashStrategyClass = internalCompileHashStrategy(types, outputChannels, joinChannels);
 
-        Class<? extends Supplier> joinHashSupplierClass = IsolatedClass.isolateClass(
+        Class<? extends LookupSourceSupplier> joinHashSupplierClass = IsolatedClass.isolateClass(
                 new DynamicClassLoader(getClass().getClassLoader()),
-                Supplier.class,
+                LookupSourceSupplier.class,
                 JoinHashSupplier.class,
                 JoinHash.class,
                 PagesHash.class);
@@ -700,10 +719,10 @@ public class JoinCompiler
 
     public static class LookupSourceSupplierFactory
     {
-        private final Constructor<? extends Supplier> constructor;
+        private final Constructor<? extends LookupSourceSupplier> constructor;
         private final PagesHashStrategyFactory pagesHashStrategyFactory;
 
-        public LookupSourceSupplierFactory(Class<? extends Supplier> joinHashSupplierClass, PagesHashStrategyFactory pagesHashStrategyFactory)
+        public LookupSourceSupplierFactory(Class<? extends LookupSourceSupplier> joinHashSupplierClass, PagesHashStrategyFactory pagesHashStrategyFactory)
         {
             this.pagesHashStrategyFactory = pagesHashStrategyFactory;
             try {
@@ -714,7 +733,7 @@ public class JoinCompiler
             }
         }
 
-        public Supplier<LookupSource> createLookupSourceSupplier(
+        public LookupSourceSupplier createLookupSourceSupplier(
                 ConnectorSession session,
                 LongArrayList addresses,
                 List<List<Block>> channels,

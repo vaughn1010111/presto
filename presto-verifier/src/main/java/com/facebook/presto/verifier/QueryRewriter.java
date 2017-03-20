@@ -18,9 +18,9 @@ import com.facebook.presto.sql.tree.CreateTableAsSelect;
 import com.facebook.presto.sql.tree.DropTable;
 import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.FunctionCall;
+import com.facebook.presto.sql.tree.Identifier;
 import com.facebook.presto.sql.tree.LongLiteral;
 import com.facebook.presto.sql.tree.QualifiedName;
-import com.facebook.presto.sql.tree.QualifiedNameReference;
 import com.facebook.presto.sql.tree.QueryBody;
 import com.facebook.presto.sql.tree.QuerySpecification;
 import com.facebook.presto.sql.tree.Select;
@@ -163,10 +163,10 @@ public class QueryRewriter
                     querySpecification.getOrderBy(),
                     Optional.of("0"));
 
-            zeroRowsQuery = new com.facebook.presto.sql.tree.Query(createSelectClause.getWith(), innerQuery, ImmutableList.of(), Optional.empty());
+            zeroRowsQuery = new com.facebook.presto.sql.tree.Query(createSelectClause.getWith(), innerQuery, Optional.empty(), Optional.empty());
         }
         else {
-            zeroRowsQuery = new com.facebook.presto.sql.tree.Query(createSelectClause.getWith(), innerQuery, ImmutableList.of(), Optional.of("0"));
+            zeroRowsQuery = new com.facebook.presto.sql.tree.Query(createSelectClause.getWith(), innerQuery, Optional.empty(), Optional.of("0"));
         }
 
         ImmutableList.Builder<Column> columns = ImmutableList.builder();
@@ -191,7 +191,7 @@ public class QueryRewriter
     {
         ImmutableList.Builder<SelectItem> selectItems = ImmutableList.builder();
         for (Column column : columns) {
-            Expression expression = new QualifiedNameReference(QualifiedName.of(column.getName()));
+            Expression expression = new Identifier(column.getName());
             if (column.isApproximateType()) {
                 expression = new FunctionCall(QualifiedName.of("round"), ImmutableList.of(expression, new LongLiteral(Integer.toString(doublePrecision))));
             }
@@ -199,7 +199,7 @@ public class QueryRewriter
         }
 
         Select select = new Select(false, selectItems.build());
-        return formatSql(new QuerySpecification(select, Optional.of(new Table(table)), Optional.empty(), Optional.empty(), Optional.empty(), ImmutableList.of(), Optional.empty()), Optional.empty());
+        return formatSql(new QuerySpecification(select, Optional.of(new Table(table)), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), Optional.empty());
     }
 
     private static String dropTableSql(QualifiedName table)
@@ -210,7 +210,7 @@ public class QueryRewriter
     public static class QueryRewriteException
             extends Exception
     {
-        public QueryRewriteException(String messageFormat, Object...args)
+        public QueryRewriteException(String messageFormat, Object... args)
         {
             super(format(messageFormat, args));
         }

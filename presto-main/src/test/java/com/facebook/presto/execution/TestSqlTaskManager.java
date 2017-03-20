@@ -128,14 +128,14 @@ public class TestSqlTaskManager
 
             BufferResult results = sqlTaskManager.getTaskResults(taskId, OUT, 0, new DataSize(1, Unit.MEGABYTE)).get();
             assertEquals(results.isBufferComplete(), false);
-            assertEquals(results.getPages().size(), 1);
-            assertEquals(results.getPages().get(0).getPositionCount(), 1);
+            assertEquals(results.getSerializedPages().size(), 1);
+            assertEquals(results.getSerializedPages().get(0).getPositionCount(), 1);
 
             for (boolean moreResults = true; moreResults; moreResults = !results.isBufferComplete()) {
-                results = sqlTaskManager.getTaskResults(taskId, OUT, results.getToken() + results.getPages().size(), new DataSize(1, Unit.MEGABYTE)).get();
+                results = sqlTaskManager.getTaskResults(taskId, OUT, results.getToken() + results.getSerializedPages().size(), new DataSize(1, Unit.MEGABYTE)).get();
             }
             assertEquals(results.isBufferComplete(), true);
-            assertEquals(results.getPages().size(), 0);
+            assertEquals(results.getSerializedPages().size(), 0);
 
             // complete the task by calling abort on it
             TaskInfo info = sqlTaskManager.abortTaskResults(taskId, OUT);
@@ -296,31 +296,31 @@ public class TestSqlTaskManager
         @Override
         public URI createQueryLocation(QueryId queryId)
         {
-            return URI.create("fake://query/" + queryId);
+            return URI.create("http://fake.invalid/query/" + queryId);
         }
 
         @Override
         public URI createStageLocation(StageId stageId)
         {
-            return URI.create("fake://stage/" + stageId);
+            return URI.create("http://fake.invalid/stage/" + stageId);
         }
 
         @Override
         public URI createLocalTaskLocation(TaskId taskId)
         {
-            return URI.create("fake://task/" + taskId);
+            return URI.create("http://fake.invalid/task/" + taskId);
         }
 
         @Override
         public URI createTaskLocation(Node node, TaskId taskId)
         {
-            return URI.create("fake://task/" + node.getNodeIdentifier() + "/" + taskId);
+            return URI.create("http://fake.invalid/task/" + node.getNodeIdentifier() + "/" + taskId);
         }
 
         @Override
         public URI createMemoryInfoLocation(Node node)
         {
-            return URI.create("fake://" + node.getNodeIdentifier() + "/memory");
+            return URI.create("http://fake.invalid/" + node.getNodeIdentifier() + "/memory");
         }
     }
 }

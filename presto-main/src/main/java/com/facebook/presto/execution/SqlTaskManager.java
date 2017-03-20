@@ -34,6 +34,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ListenableFuture;
 import io.airlift.concurrent.ThreadPoolExecutorMBean;
 import io.airlift.log.Logger;
 import io.airlift.node.NodeInfo;
@@ -52,7 +53,6 @@ import javax.inject.Inject;
 import java.io.Closeable;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -113,7 +113,6 @@ public class SqlTaskManager
         clientTimeout = config.getClientTimeout();
 
         DataSize maxBufferSize = config.getSinkMaxBufferSize();
-        boolean newSinkBufferImplementation = config.isNewSinkBufferImplementation();
 
         taskNotificationExecutor = newFixedThreadPool(config.getTaskNotificationThreads(), threadsNamed("task-notification-%s"));
         taskNotificationExecutorMBean = new ThreadPoolExecutorMBean((ThreadPoolExecutor) taskNotificationExecutor);
@@ -152,9 +151,7 @@ public class SqlTaskManager
                                 finishedTaskStats.merge(sqlTask.getIoStats());
                                 return null;
                         },
-                        maxBufferSize,
-                        newSinkBufferImplementation
-                );
+                        maxBufferSize);
             }
         });
     }
@@ -276,7 +273,7 @@ public class SqlTaskManager
     }
 
     @Override
-    public CompletableFuture<TaskInfo> getTaskInfo(TaskId taskId, TaskState currentState)
+    public ListenableFuture<TaskInfo> getTaskInfo(TaskId taskId, TaskState currentState)
     {
         requireNonNull(taskId, "taskId is null");
         requireNonNull(currentState, "currentState is null");
@@ -295,7 +292,7 @@ public class SqlTaskManager
     }
 
     @Override
-    public CompletableFuture<TaskStatus> getTaskStatus(TaskId taskId, TaskState currentState)
+    public ListenableFuture<TaskStatus> getTaskStatus(TaskId taskId, TaskState currentState)
     {
         requireNonNull(taskId, "taskId is null");
         requireNonNull(currentState, "currentState is null");
@@ -325,7 +322,7 @@ public class SqlTaskManager
     }
 
     @Override
-    public CompletableFuture<BufferResult> getTaskResults(TaskId taskId, OutputBufferId bufferId, long startingSequenceId, DataSize maxSize)
+    public ListenableFuture<BufferResult> getTaskResults(TaskId taskId, OutputBufferId bufferId, long startingSequenceId, DataSize maxSize)
     {
         requireNonNull(taskId, "taskId is null");
         requireNonNull(bufferId, "bufferId is null");

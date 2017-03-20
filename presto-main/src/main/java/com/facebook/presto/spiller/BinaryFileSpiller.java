@@ -13,13 +13,13 @@
  */
 package com.facebook.presto.spiller;
 
-import com.facebook.presto.block.PagesSerde;
+import com.facebook.presto.execution.buffer.PagesSerde;
+import com.facebook.presto.execution.buffer.PagesSerdeUtil;
 import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.PrestoException;
-import com.facebook.presto.spi.block.BlockEncodingSerde;
 import com.google.common.io.Closer;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
-import io.airlift.concurrent.MoreFutures;
 import io.airlift.slice.InputStreamSliceInput;
 import io.airlift.slice.OutputStreamSliceOutput;
 import io.airlift.slice.RuntimeIOException;
@@ -38,7 +38,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -46,6 +45,7 @@ import java.util.stream.Stream;
 import static com.facebook.presto.spi.StandardErrorCode.GENERIC_INTERNAL_ERROR;
 import static com.facebook.presto.util.ImmutableCollectors.toImmutableList;
 import static com.google.common.base.Preconditions.checkState;
+import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
@@ -55,23 +55,23 @@ public class BinaryFileSpiller
 {
     private final Path targetDirectory;
     private final Closer closer = Closer.create();
-    private final BlockEncodingSerde blockEncodingSerde;
-    private final AtomicLong spilledDataSize;
+    private final PagesSerde serde;
+    private final AtomicLong totalSpilledDataSize;
 
     private final ListeningExecutorService executor;
 
     private int spillsCount;
-    private CompletableFuture<?> previousSpill = CompletableFuture.completedFuture(null);
+    private ListenableFuture<?> previousSpill = immediateFuture(null);
 
     public BinaryFileSpiller(
-            BlockEncodingSerde blockEncodingSerde,
+            PagesSerde serde,
             ListeningExecutorService executor,
             Path spillPath,
-            AtomicLong spilledDataSize)
+            AtomicLong totalSpilledDataSize)
     {
-        this.blockEncodingSerde = requireNonNull(blockEncodingSerde, "blockEncodingSerde is null");
+        this.serde = requireNonNull(serde, "serde is null");
         this.executor = requireNonNull(executor, "executor is null");
-        this.spilledDataSize = requireNonNull(spilledDataSize, "spilledDataSize is null");
+        this.totalSpilledDataSize = requireNonNull(totalSpilledDataSize, "totalSpilledDataSize is null");
         try {
             this.targetDirectory = Files.createTempDirectory(spillPath, "presto-spill");
         }
@@ -81,20 +81,19 @@ public class BinaryFileSpiller
     }
 
     @Override
-    public CompletableFuture<?> spill(Iterator<Page> pageIterator)
+    public ListenableFuture<?> spill(Iterator<Page> pageIterator)
     {
         checkState(previousSpill.isDone());
         Path spillPath = getPath(spillsCount++);
 
-        previousSpill = MoreFutures.toCompletableFuture(executor.submit(
-                () -> writePages(pageIterator, spillPath)));
+        previousSpill = executor.submit(() -> writePages(pageIterator, spillPath));
         return previousSpill;
     }
 
     private void writePages(Iterator<Page> pageIterator, Path spillPath)
     {
         try (SliceOutput output = new OutputStreamSliceOutput(new BufferedOutputStream(new FileOutputStream(spillPath.toFile())))) {
-            spilledDataSize.addAndGet(PagesSerde.writePages(blockEncodingSerde, output, pageIterator));
+            totalSpilledDataSize.addAndGet(PagesSerdeUtil.writePages(serde, output, pageIterator));
         }
         catch (RuntimeIOException | IOException e) {
             throw new PrestoException(GENERIC_INTERNAL_ERROR, "Failed to spill pages", e);
@@ -115,7 +114,7 @@ public class BinaryFileSpiller
         try {
             InputStream input = new BufferedInputStream(new FileInputStream(spillPath.toFile()));
             closer.register(input);
-            return PagesSerde.readPages(blockEncodingSerde, new InputStreamSliceInput(input));
+            return PagesSerdeUtil.readPages(serde, new InputStreamSliceInput(input));
         }
         catch (IOException e) {
             throw new PrestoException(GENERIC_INTERNAL_ERROR, "Failed to read spilled pages", e);

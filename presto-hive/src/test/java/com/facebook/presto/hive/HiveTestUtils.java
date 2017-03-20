@@ -16,7 +16,9 @@ package com.facebook.presto.hive;
 import com.facebook.presto.hive.authentication.NoHdfsAuthentication;
 import com.facebook.presto.hive.orc.DwrfPageSourceFactory;
 import com.facebook.presto.hive.orc.OrcPageSourceFactory;
+import com.facebook.presto.hive.parquet.ParquetPageSourceFactory;
 import com.facebook.presto.hive.parquet.ParquetRecordCursorProvider;
+import com.facebook.presto.hive.rcfile.RcFilePageSourceFactory;
 import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.type.Type;
@@ -45,8 +47,10 @@ public final class HiveTestUtils
     {
         HdfsEnvironment testHdfsEnvironment = createTestHdfsEnvironment(hiveClientConfig);
         return ImmutableSet.<HivePageSourceFactory>builder()
+                .add(new RcFilePageSourceFactory(TYPE_MANAGER, testHdfsEnvironment))
                 .add(new OrcPageSourceFactory(TYPE_MANAGER, hiveClientConfig, testHdfsEnvironment))
                 .add(new DwrfPageSourceFactory(TYPE_MANAGER, testHdfsEnvironment))
+                .add(new ParquetPageSourceFactory(TYPE_MANAGER, hiveClientConfig, testHdfsEnvironment))
                 .build();
     }
 
@@ -61,6 +65,14 @@ public final class HiveTestUtils
                 .build();
     }
 
+    public static Set<HiveFileWriterFactory> getDefaultHiveFileWriterFactories(HiveClientConfig hiveClientConfig)
+    {
+        HdfsEnvironment testHdfsEnvironment = createTestHdfsEnvironment(hiveClientConfig);
+        return ImmutableSet.<HiveFileWriterFactory>builder()
+                .add(new RcFileFileWriterFactory(testHdfsEnvironment, TYPE_MANAGER, new NodeVersion("test_version"), hiveClientConfig))
+                .build();
+    }
+
     public static List<Type> getTypes(List<? extends ColumnHandle> columnHandles)
     {
         ImmutableList.Builder<Type> types = ImmutableList.builder();
@@ -72,6 +84,12 @@ public final class HiveTestUtils
 
     public static HdfsEnvironment createTestHdfsEnvironment(HiveClientConfig config)
     {
-        return new HdfsEnvironment(new HiveHdfsConfiguration(new HdfsConfigurationUpdater(config)), config, new NoHdfsAuthentication());
+        return createTestHdfsEnvironment(config, new HiveS3Config());
+    }
+
+    public static HdfsEnvironment createTestHdfsEnvironment(HiveClientConfig hiveConfig, HiveS3Config s3Config)
+    {
+        HdfsConfiguration hdfsConfig = new HiveHdfsConfiguration(new HdfsConfigurationUpdater(hiveConfig, s3Config));
+        return new HdfsEnvironment(hdfsConfig, hiveConfig, new NoHdfsAuthentication());
     }
 }

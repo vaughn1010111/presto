@@ -36,6 +36,7 @@ import static com.facebook.presto.operator.SyntheticAddress.encodeSyntheticAddre
 import static com.facebook.presto.spi.StandardErrorCode.GENERIC_INSUFFICIENT_RESOURCES;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.sql.gen.JoinCompiler.PagesHashStrategyFactory;
+import static com.facebook.presto.util.HashCollisionsEstimator.estimateNumberOfHashCollisions;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Verify.verify;
 import static io.airlift.slice.SizeOf.sizeOf;
@@ -47,8 +48,6 @@ import static java.util.Objects.requireNonNull;
 public class MultiChannelGroupByHash
         implements GroupByHash
 {
-    private static final JoinCompiler JOIN_COMPILER = new JoinCompiler();
-
     private static final float FILL_RATIO = 0.75f;
     private final List<Type> types;
     private final List<Type> hashTypes;
@@ -64,6 +63,7 @@ public class MultiChannelGroupByHash
 
     private long completedPagesMemorySize;
 
+    private int hashCapacity;
     private int maxFill;
     private int mask;
     private long[] groupAddressByHash;
@@ -74,16 +74,20 @@ public class MultiChannelGroupByHash
 
     private int nextGroupId;
     private DictionaryLookBack dictionaryLookBack;
+    private long hashCollisions;
+    private double expectedHashCollisions;
 
     public MultiChannelGroupByHash(
             List<? extends Type> hashTypes,
             int[] hashChannels,
             Optional<Integer> inputHashChannel,
             int expectedSize,
-            boolean processDictionary)
+            boolean processDictionary,
+            JoinCompiler joinCompiler)
     {
         this.hashTypes = ImmutableList.copyOf(requireNonNull(hashTypes, "hashTypes is null"));
 
+        requireNonNull(joinCompiler, "joinCompiler is null");
         checkArgument(hashTypes.size() == hashChannels.length, "hashTypes and hashChannels have different sizes");
         checkArgument(expectedSize > 0, "expectedSize must be greater than zero");
 
@@ -111,22 +115,22 @@ public class MultiChannelGroupByHash
             this.precomputedHashChannel = Optional.empty();
         }
         this.channelBuilders = channelBuilders.build();
-        PagesHashStrategyFactory pagesHashStrategyFactory = JOIN_COMPILER.compilePagesHashStrategyFactory(this.types, outputChannels.build());
+        PagesHashStrategyFactory pagesHashStrategyFactory = joinCompiler.compilePagesHashStrategyFactory(this.types, outputChannels.build());
         hashStrategy = pagesHashStrategyFactory.createPagesHashStrategy(this.channelBuilders, this.precomputedHashChannel);
 
         startNewPage();
 
         // reserve memory for the arrays
-        int hashSize = arraySize(expectedSize, FILL_RATIO);
+        hashCapacity = arraySize(expectedSize, FILL_RATIO);
 
-        maxFill = calculateMaxFill(hashSize);
-        mask = hashSize - 1;
-        groupAddressByHash = new long[hashSize];
+        maxFill = calculateMaxFill(hashCapacity);
+        mask = hashCapacity - 1;
+        groupAddressByHash = new long[hashCapacity];
         Arrays.fill(groupAddressByHash, -1);
 
-        rawHashByHashPosition = new byte[hashSize];
+        rawHashByHashPosition = new byte[hashCapacity];
 
-        groupIdsByHash = new int[hashSize];
+        groupIdsByHash = new int[hashCapacity];
 
         groupAddressByGroupId = new LongBigArray();
         groupAddressByGroupId.ensureCapacity(maxFill);
@@ -151,6 +155,18 @@ public class MultiChannelGroupByHash
                 sizeOf(groupIdsByHash) +
                 groupAddressByGroupId.sizeOf() +
                 sizeOf(rawHashByHashPosition);
+    }
+
+    @Override
+    public long getHashCollisions()
+    {
+        return hashCollisions;
+    }
+
+    @Override
+    public double getExpectedHashCollisions()
+    {
+        return expectedHashCollisions + estimateNumberOfHashCollisions(getGroupCount(), hashCapacity);
     }
 
     @Override
@@ -255,6 +271,7 @@ public class MultiChannelGroupByHash
             }
             // increment position and mask to handle wrap around
             hashPosition = (hashPosition + 1) & mask;
+            hashCollisions++;
         }
 
         // did we find an existing group?
@@ -314,7 +331,9 @@ public class MultiChannelGroupByHash
 
     private void rehash()
     {
-        long newCapacityLong = this.groupIdsByHash.length * 2L;
+        expectedHashCollisions += estimateNumberOfHashCollisions(getGroupCount(), hashCapacity);
+
+        long newCapacityLong = hashCapacity * 2L;
         if (newCapacityLong > Integer.MAX_VALUE) {
             throw new PrestoException(GENERIC_INSUFFICIENT_RESOURCES, "Size of hash table cannot exceed 1 billion entries");
         }
@@ -341,6 +360,7 @@ public class MultiChannelGroupByHash
             int pos = (int) getHashPosition(rawHash, newMask);
             while (newKey[pos] != -1) {
                 pos = (pos + 1) & newMask;
+                hashCollisions++;
             }
 
             // record the mapping
@@ -351,6 +371,7 @@ public class MultiChannelGroupByHash
         }
 
         this.mask = newMask;
+        this.hashCapacity = newCapacity;
         this.maxFill = calculateMaxFill(newCapacity);
         this.groupAddressByHash = newKey;
         this.rawHashByHashPosition = rawHashes;

@@ -32,21 +32,21 @@ import com.facebook.presto.sql.tree.DereferenceExpression;
 import com.facebook.presto.sql.tree.ExistsPredicate;
 import com.facebook.presto.sql.tree.Expression;
 import com.facebook.presto.sql.tree.ExpressionTreeRewriter;
+import com.facebook.presto.sql.tree.Identifier;
 import com.facebook.presto.sql.tree.InPredicate;
 import com.facebook.presto.sql.tree.LambdaArgumentDeclaration;
 import com.facebook.presto.sql.tree.Node;
 import com.facebook.presto.sql.tree.NotExpression;
-import com.facebook.presto.sql.tree.QualifiedNameReference;
 import com.facebook.presto.sql.tree.QuantifiedComparisonExpression;
 import com.facebook.presto.sql.tree.QuantifiedComparisonExpression.Quantifier;
 import com.facebook.presto.sql.tree.SubqueryExpression;
 import com.facebook.presto.sql.tree.SymbolReference;
+import com.facebook.presto.util.maps.IdentityLinkedHashMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
 import java.util.Collection;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -70,7 +70,7 @@ class SubqueryPlanner
     private final Analysis analysis;
     private final SymbolAllocator symbolAllocator;
     private final PlanNodeIdAllocator idAllocator;
-    private final IdentityHashMap<LambdaArgumentDeclaration, Symbol> lambdaDeclarationToSymbolMap;
+    private final IdentityLinkedHashMap<LambdaArgumentDeclaration, Symbol> lambdaDeclarationToSymbolMap;
     private final Metadata metadata;
     private final Session session;
     private final List<Expression> parameters;
@@ -79,7 +79,7 @@ class SubqueryPlanner
             Analysis analysis,
             SymbolAllocator symbolAllocator,
             PlanNodeIdAllocator idAllocator,
-            IdentityHashMap<LambdaArgumentDeclaration, Symbol> lambdaDeclarationToSymbolMap,
+            IdentityLinkedHashMap<LambdaArgumentDeclaration, Symbol> lambdaDeclarationToSymbolMap,
             Metadata metadata,
             Session session,
             List<Expression> parameters)
@@ -467,10 +467,10 @@ class SubqueryPlanner
 
         // Make field->symbol mapping from underlying relation plan available for translations
         // This makes it possible to rewrite FieldOrExpressions that reference fields from the FROM clause directly
-        translations.setFieldMappings(relationPlan.getOutputSymbols());
+        translations.setFieldMappings(relationPlan.getFieldMappings());
 
-        if (node instanceof Expression && relationPlan.getOutputSymbols().size() == 1) {
-            translations.put((Expression) node, getOnlyElement(relationPlan.getOutputSymbols()));
+        if (node instanceof Expression && relationPlan.getFieldMappings().size() == 1) {
+            translations.put((Expression) node, getOnlyElement(relationPlan.getFieldMappings()));
         }
 
         return new PlanBuilder(translations, relationPlan.getRoot(), analysis.getParameters());
@@ -529,7 +529,7 @@ class SubqueryPlanner
         }
 
         @Override
-        protected Void visitQualifiedNameReference(QualifiedNameReference node, ImmutableSet.Builder<Expression> builder)
+        protected Void visitIdentifier(Identifier node, ImmutableSet.Builder<Expression> builder)
         {
             builder.add(node);
             return null;

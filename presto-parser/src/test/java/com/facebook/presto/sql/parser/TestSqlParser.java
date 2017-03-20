@@ -56,6 +56,7 @@ import com.facebook.presto.sql.tree.GenericLiteral;
 import com.facebook.presto.sql.tree.Grant;
 import com.facebook.presto.sql.tree.GroupBy;
 import com.facebook.presto.sql.tree.GroupingSets;
+import com.facebook.presto.sql.tree.Identifier;
 import com.facebook.presto.sql.tree.Insert;
 import com.facebook.presto.sql.tree.Intersect;
 import com.facebook.presto.sql.tree.IntervalLiteral;
@@ -73,10 +74,10 @@ import com.facebook.presto.sql.tree.NaturalJoin;
 import com.facebook.presto.sql.tree.Node;
 import com.facebook.presto.sql.tree.NotExpression;
 import com.facebook.presto.sql.tree.NullLiteral;
+import com.facebook.presto.sql.tree.OrderBy;
 import com.facebook.presto.sql.tree.Parameter;
 import com.facebook.presto.sql.tree.Prepare;
 import com.facebook.presto.sql.tree.QualifiedName;
-import com.facebook.presto.sql.tree.QualifiedNameReference;
 import com.facebook.presto.sql.tree.QuantifiedComparisonExpression;
 import com.facebook.presto.sql.tree.Query;
 import com.facebook.presto.sql.tree.QuerySpecification;
@@ -118,7 +119,7 @@ import org.testng.annotations.Test;
 
 import java.util.Optional;
 
-import static com.facebook.presto.sql.QueryUtil.nameReference;
+import static com.facebook.presto.sql.QueryUtil.identifier;
 import static com.facebook.presto.sql.QueryUtil.query;
 import static com.facebook.presto.sql.QueryUtil.row;
 import static com.facebook.presto.sql.QueryUtil.selectList;
@@ -410,7 +411,7 @@ public class TestSqlParser
                                 new Intersect(ImmutableList.of(createSelect123(), createSelect123()), true),
                                 createSelect123()
                         ), false),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
     }
 
@@ -424,7 +425,7 @@ public class TestSqlParser
                                 new Union(ImmutableList.of(createSelect123(), createSelect123()), true),
                                 createSelect123()
                         ), false),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
     }
 
@@ -436,7 +437,7 @@ public class TestSqlParser
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
-                ImmutableList.of(),
+                Optional.empty(),
                 Optional.empty()
         );
     }
@@ -462,7 +463,7 @@ public class TestSqlParser
                         Optional.empty(),
                         Optional.empty(),
                         Optional.empty(),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.of("ALL")));
     }
 
@@ -815,29 +816,29 @@ public class TestSqlParser
         assertStatement("SHOW PARTITIONS FROM t WHERE x = 1",
                 new ShowPartitions(
                         QualifiedName.of("t"),
-                        Optional.of(new ComparisonExpression(ComparisonExpressionType.EQUAL, new QualifiedNameReference(QualifiedName.of("x")), new LongLiteral("1"))),
+                        Optional.of(new ComparisonExpression(ComparisonExpressionType.EQUAL, new Identifier("x"), new LongLiteral("1"))),
                         ImmutableList.of(),
                         Optional.empty()));
 
         assertStatement("SHOW PARTITIONS FROM t WHERE x = 1 ORDER BY y",
                 new ShowPartitions(
                         QualifiedName.of("t"),
-                        Optional.of(new ComparisonExpression(ComparisonExpressionType.EQUAL, new QualifiedNameReference(QualifiedName.of("x")), new LongLiteral("1"))),
-                        ImmutableList.of(new SortItem(new QualifiedNameReference(QualifiedName.of("y")), SortItem.Ordering.ASCENDING, SortItem.NullOrdering.UNDEFINED)),
+                        Optional.of(new ComparisonExpression(ComparisonExpressionType.EQUAL, new Identifier("x"), new LongLiteral("1"))),
+                        ImmutableList.of(new SortItem(new Identifier("y"), SortItem.Ordering.ASCENDING, SortItem.NullOrdering.UNDEFINED)),
                         Optional.empty()));
 
         assertStatement("SHOW PARTITIONS FROM t WHERE x = 1 ORDER BY y LIMIT 10",
                 new ShowPartitions(
                         QualifiedName.of("t"),
-                        Optional.of(new ComparisonExpression(ComparisonExpressionType.EQUAL, new QualifiedNameReference(QualifiedName.of("x")), new LongLiteral("1"))),
-                        ImmutableList.of(new SortItem(new QualifiedNameReference(QualifiedName.of("y")), SortItem.Ordering.ASCENDING, SortItem.NullOrdering.UNDEFINED)),
+                        Optional.of(new ComparisonExpression(ComparisonExpressionType.EQUAL, new Identifier("x"), new LongLiteral("1"))),
+                        ImmutableList.of(new SortItem(new Identifier("y"), SortItem.Ordering.ASCENDING, SortItem.NullOrdering.UNDEFINED)),
                         Optional.of("10")));
 
         assertStatement("SHOW PARTITIONS FROM t WHERE x = 1 ORDER BY y LIMIT ALL",
                 new ShowPartitions(
                         QualifiedName.of("t"),
-                        Optional.of(new ComparisonExpression(ComparisonExpressionType.EQUAL, new QualifiedNameReference(QualifiedName.of("x")), new LongLiteral("1"))),
-                        ImmutableList.of(new SortItem(new QualifiedNameReference(QualifiedName.of("y")), SortItem.Ordering.ASCENDING, SortItem.NullOrdering.UNDEFINED)),
+                        Optional.of(new ComparisonExpression(ComparisonExpressionType.EQUAL, new Identifier("x"), new LongLiteral("1"))),
+                        ImmutableList.of(new SortItem(new Identifier("y"), SortItem.Ordering.ASCENDING, SortItem.NullOrdering.UNDEFINED)),
                         Optional.of("ALL")));
     }
 
@@ -854,9 +855,9 @@ public class TestSqlParser
                                 Optional.empty(),
                                 Optional.empty(),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
 
         assertStatement(format("SELECT substring('%s' FROM 2 FOR 3)", givenString),
@@ -868,9 +869,9 @@ public class TestSqlParser
                                 Optional.empty(),
                                 Optional.empty(),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
     }
 
@@ -887,9 +888,9 @@ public class TestSqlParser
                                 Optional.empty(),
                                 Optional.empty(),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
 
         assertStatement(format("SELECT substring('%s', 2, 3)", givenString),
@@ -901,9 +902,9 @@ public class TestSqlParser
                                 Optional.empty(),
                                 Optional.empty(),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
     }
 
@@ -916,17 +917,17 @@ public class TestSqlParser
                         Optional.empty(),
                         new QuerySpecification(
                                 selectList(
-                                        new DereferenceExpression(new QualifiedNameReference(QualifiedName.of("col1")), "f1"),
-                                        new QualifiedNameReference(QualifiedName.of("col2")),
+                                        new DereferenceExpression(new Identifier("col1"), "f1"),
+                                        new Identifier("col2"),
                                         new DereferenceExpression(
-                                                new DereferenceExpression(new DereferenceExpression(new QualifiedNameReference(QualifiedName.of("col3")), "f1"), "f2"), "f3")),
+                                                new DereferenceExpression(new DereferenceExpression(new Identifier("col3"), "f1"), "f2"), "f3")),
                                 Optional.of(new Table(QualifiedName.of("table1"))),
                                 Optional.empty(),
                                 Optional.empty(),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
 
         assertStatement("SELECT col1.f1[0], col2, col3[2].f2.f3, col4[4] FROM table1",
@@ -934,18 +935,18 @@ public class TestSqlParser
                         Optional.empty(),
                         new QuerySpecification(
                                 selectList(
-                                        new SubscriptExpression(new DereferenceExpression(new QualifiedNameReference(QualifiedName.of("col1")), "f1"), new LongLiteral("0")),
-                                        new QualifiedNameReference(QualifiedName.of("col2")),
-                                        new DereferenceExpression(new DereferenceExpression(new SubscriptExpression(new QualifiedNameReference(QualifiedName.of("col3")), new LongLiteral("2")), "f2"), "f3"),
-                                        new SubscriptExpression(new QualifiedNameReference(QualifiedName.of("col4")), new LongLiteral("4"))
+                                        new SubscriptExpression(new DereferenceExpression(new Identifier("col1"), "f1"), new LongLiteral("0")),
+                                        new Identifier("col2"),
+                                        new DereferenceExpression(new DereferenceExpression(new SubscriptExpression(new Identifier("col3"), new LongLiteral("2")), "f2"), "f3"),
+                                        new SubscriptExpression(new Identifier("col4"), new LongLiteral("4"))
                                 ),
                                 Optional.of(new Table(QualifiedName.of("table1"))),
                                 Optional.empty(),
                                 Optional.empty(),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
 
         assertStatement("SELECT CAST(ROW(11, 12) AS ROW(COL0 INTEGER, COL1 INTEGER)).col0",
@@ -959,9 +960,31 @@ public class TestSqlParser
                                 Optional.empty(),
                                 Optional.empty(),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
+                        Optional.empty()));
+    }
+
+    @Test
+    public void testSelectWithOrderBy()
+            throws Exception
+    {
+        assertStatement("SELECT * FROM table1 ORDER BY a",
+                new Query(
+                        Optional.empty(),
+                        new QuerySpecification(
+                                selectList(new AllColumns()),
+                                Optional.of(new Table(QualifiedName.of("table1"))),
+                                Optional.empty(),
+                                Optional.empty(),
+                                Optional.empty(),
+                                Optional.of(new OrderBy(ImmutableList.of(new SortItem(
+                                        new Identifier("a"),
+                                        SortItem.Ordering.ASCENDING,
+                                        SortItem.NullOrdering.UNDEFINED)))),
+                                Optional.empty()),
+                        Optional.empty(),
                         Optional.empty()));
     }
 
@@ -976,11 +999,11 @@ public class TestSqlParser
                                 selectList(new AllColumns()),
                                 Optional.of(new Table(QualifiedName.of("table1"))),
                                 Optional.empty(),
-                                Optional.of(new GroupBy(false, ImmutableList.of(new SimpleGroupBy(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("a"))))))),
+                                Optional.of(new GroupBy(false, ImmutableList.of(new SimpleGroupBy(ImmutableList.of(new Identifier("a")))))),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
 
         assertStatement("SELECT * FROM table1 GROUP BY a, b",
@@ -991,12 +1014,12 @@ public class TestSqlParser
                                 Optional.of(new Table(QualifiedName.of("table1"))),
                                 Optional.empty(),
                                 Optional.of(new GroupBy(false, ImmutableList.of(
-                                        new SimpleGroupBy(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("a")))),
-                                        new SimpleGroupBy(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("b"))))))),
+                                        new SimpleGroupBy(ImmutableList.of(new Identifier("a"))),
+                                        new SimpleGroupBy(ImmutableList.of(new Identifier("b")))))),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
 
         assertStatement("SELECT * FROM table1 GROUP BY ()",
@@ -1008,9 +1031,9 @@ public class TestSqlParser
                                 Optional.empty(),
                                 Optional.of(new GroupBy(false, ImmutableList.of(new SimpleGroupBy(ImmutableList.of())))),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
 
         assertStatement("SELECT * FROM table1 GROUP BY GROUPING SETS (a)",
@@ -1022,9 +1045,9 @@ public class TestSqlParser
                                 Optional.empty(),
                                 Optional.of(new GroupBy(false, ImmutableList.of(new GroupingSets(ImmutableList.of(ImmutableList.of(QualifiedName.of("a"))))))),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
 
         assertStatement("SELECT * FROM table1 GROUP BY ALL GROUPING SETS ((a, b), (a), ()), CUBE (c), ROLLUP (d)",
@@ -1042,9 +1065,9 @@ public class TestSqlParser
                                         new Cube(ImmutableList.of(QualifiedName.of("c"))),
                                         new Rollup(ImmutableList.of(QualifiedName.of("d")))))),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
 
         assertStatement("SELECT * FROM table1 GROUP BY DISTINCT GROUPING SETS ((a, b), (a), ()), CUBE (c), ROLLUP (d)",
@@ -1062,9 +1085,9 @@ public class TestSqlParser
                                         new Cube(ImmutableList.of(QualifiedName.of("c"))),
                                         new Rollup(ImmutableList.of(QualifiedName.of("d")))))),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
     }
 
@@ -1257,8 +1280,8 @@ public class TestSqlParser
 
         assertStatement("DELETE FROM t WHERE a = b", new Delete(table(QualifiedName.of("t")), Optional.of(
                 new ComparisonExpression(ComparisonExpressionType.EQUAL,
-                        new QualifiedNameReference(QualifiedName.of("a")),
-                        new QualifiedNameReference(QualifiedName.of("b"))))));
+                        new Identifier("a"),
+                        new Identifier("b")))));
     }
 
     @Test
@@ -1334,14 +1357,14 @@ public class TestSqlParser
                         new WithQuery("a", simpleQuery(selectList(new AllColumns()), table(QualifiedName.of("x"))), Optional.of(ImmutableList.of("t", "u"))),
                         new WithQuery("b", simpleQuery(selectList(new AllColumns()), table(QualifiedName.of("y"))), Optional.empty())))),
                         new Table(QualifiedName.of("z")),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
 
         assertStatement("WITH RECURSIVE a AS (SELECT * FROM x) TABLE y",
                 new Query(Optional.of(new With(true, ImmutableList.of(
                         new WithQuery("a", simpleQuery(selectList(new AllColumns()), table(QualifiedName.of("x"))), Optional.empty())))),
                         new Table(QualifiedName.of("y")),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
     }
 
@@ -1435,7 +1458,7 @@ public class TestSqlParser
                         new Join(
                                 Join.Type.CROSS,
                                 new Table(QualifiedName.of("t")),
-                                new Unnest(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("a"))), false),
+                                new Unnest(ImmutableList.of(new Identifier("a")), false),
                                 Optional.empty())));
         assertStatement("SELECT * FROM t CROSS JOIN UNNEST(a) WITH ORDINALITY",
                 simpleQuery(
@@ -1443,7 +1466,7 @@ public class TestSqlParser
                         new Join(
                                 Join.Type.CROSS,
                                 new Table(QualifiedName.of("t")),
-                                new Unnest(ImmutableList.of(new QualifiedNameReference(QualifiedName.of("a"))), true),
+                                new Unnest(ImmutableList.of(new Identifier("a")), true),
                                 Optional.empty())));
     }
 
@@ -1515,9 +1538,9 @@ public class TestSqlParser
                                 Optional.empty(),
                                 Optional.empty(),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
     }
 
@@ -1528,14 +1551,14 @@ public class TestSqlParser
         assertExpression("x -> sin(x)",
                 new LambdaExpression(
                         ImmutableList.of(new LambdaArgumentDeclaration("x")),
-                        new FunctionCall(QualifiedName.of("sin"), ImmutableList.of(new QualifiedNameReference(QualifiedName.of("x"))))
+                        new FunctionCall(QualifiedName.of("sin"), ImmutableList.of(new Identifier("x")))
                 ));
         assertExpression("(x, y) -> mod(x, y)",
                 new LambdaExpression(
                         ImmutableList.of(new LambdaArgumentDeclaration("x"), new LambdaArgumentDeclaration("y")),
                         new FunctionCall(
                                 QualifiedName.of("mod"),
-                                ImmutableList.of(new QualifiedNameReference(QualifiedName.of("x")), new QualifiedNameReference(QualifiedName.of("y"))))
+                                ImmutableList.of(new Identifier("x"), new Identifier("y")))
                 ));
     }
 
@@ -1545,21 +1568,21 @@ public class TestSqlParser
     {
         assertStatement("SELECT zone FROM t",
                 simpleQuery(
-                        selectList(new QualifiedNameReference(QualifiedName.of("zone"))),
+                        selectList(new Identifier("zone")),
                         table(QualifiedName.of("t"))));
         assertStatement("SELECT INCLUDING, EXCLUDING, PROPERTIES FROM t",
                 simpleQuery(
                         selectList(
-                                new QualifiedNameReference(QualifiedName.of("INCLUDING")),
-                                new QualifiedNameReference(QualifiedName.of("EXCLUDING")),
-                                new QualifiedNameReference(QualifiedName.of("PROPERTIES"))),
+                                new Identifier("INCLUDING"),
+                                new Identifier("EXCLUDING"),
+                                new Identifier("PROPERTIES")),
                         table(QualifiedName.of("t"))));
         assertStatement("SELECT ALL, SOME, ANY FROM t",
                 simpleQuery(
                         selectList(
-                                new QualifiedNameReference(QualifiedName.of("ALL")),
-                                new QualifiedNameReference(QualifiedName.of("SOME")),
-                                new QualifiedNameReference(QualifiedName.of("ANY"))),
+                                new Identifier("ALL"),
+                                new Identifier("SOME"),
+                                new Identifier("ANY")),
                         table(QualifiedName.of("t"))));
     }
 
@@ -1683,17 +1706,17 @@ public class TestSqlParser
                                                 Optional.empty(),
                                                 Optional.of(new ComparisonExpression(
                                                         ComparisonExpressionType.GREATER_THAN,
-                                                        new QualifiedNameReference(QualifiedName.of("x")),
+                                                        new Identifier("x"),
                                                         new LongLiteral("4"))),
                                                 false,
-                                                ImmutableList.of(new QualifiedNameReference(QualifiedName.of("x"))))),
+                                                ImmutableList.of(new Identifier("x")))),
                                 Optional.empty(),
                                 Optional.empty(),
                                 Optional.empty(),
                                 Optional.empty(),
-                                ImmutableList.of(),
+                                Optional.empty(),
                                 Optional.empty()),
-                        ImmutableList.of(),
+                        Optional.empty(),
                         Optional.empty()));
     }
 
@@ -1704,21 +1727,21 @@ public class TestSqlParser
                 new QuantifiedComparisonExpression(
                         ComparisonExpressionType.LESS_THAN,
                         QuantifiedComparisonExpression.Quantifier.ANY,
-                        nameReference("col1"),
-                        new SubqueryExpression(simpleQuery(selectList(new SingleColumn(nameReference("col2"))), table(QualifiedName.of("table1"))))
+                        identifier("col1"),
+                        new SubqueryExpression(simpleQuery(selectList(new SingleColumn(identifier("col2"))), table(QualifiedName.of("table1"))))
                 ));
         assertExpression("col1 = ALL (VALUES ROW(1), ROW(2))",
                 new QuantifiedComparisonExpression(
                         ComparisonExpressionType.EQUAL,
                         QuantifiedComparisonExpression.Quantifier.ALL,
-                        nameReference("col1"),
+                        identifier("col1"),
                         new SubqueryExpression(query(values(row(new LongLiteral("1")), row(new LongLiteral("2")))))
                 ));
         assertExpression("col1 >= SOME (SELECT 10)",
                 new QuantifiedComparisonExpression(
                         ComparisonExpressionType.GREATER_THAN_OR_EQUAL,
                         QuantifiedComparisonExpression.Quantifier.SOME,
-                        nameReference("col1"),
+                        identifier("col1"),
                         new SubqueryExpression(simpleQuery(selectList(new LongLiteral("10"))))
                 ));
     }

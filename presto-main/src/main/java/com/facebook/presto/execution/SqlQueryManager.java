@@ -18,12 +18,15 @@ import com.facebook.presto.SystemSessionProperties;
 import com.facebook.presto.event.query.QueryMonitor;
 import com.facebook.presto.execution.QueryExecution.QueryExecutionFactory;
 import com.facebook.presto.execution.SqlQueryExecution.SqlQueryExecutionFactory;
+import com.facebook.presto.execution.resourceGroups.QueryQueueFullException;
 import com.facebook.presto.memory.ClusterMemoryManager;
+import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.metadata.SessionPropertyManager;
 import com.facebook.presto.security.AccessControl;
 import com.facebook.presto.server.SessionSupplier;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.QueryId;
+import com.facebook.presto.spi.resourceGroups.ResourceGroupId;
 import com.facebook.presto.sql.analyzer.SemanticException;
 import com.facebook.presto.sql.parser.ParsingException;
 import com.facebook.presto.sql.parser.SqlParser;
@@ -66,6 +69,7 @@ import static com.facebook.presto.execution.QueryState.RUNNING;
 import static com.facebook.presto.spi.StandardErrorCode.ABANDONED_QUERY;
 import static com.facebook.presto.spi.StandardErrorCode.EXCEEDED_TIME_LIMIT;
 import static com.facebook.presto.spi.StandardErrorCode.NOT_SUPPORTED;
+import static com.facebook.presto.spi.StandardErrorCode.QUERY_TEXT_TOO_LARGE;
 import static com.facebook.presto.spi.StandardErrorCode.SERVER_SHUTTING_DOWN;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.INVALID_PARAMETER_USAGE;
 import static com.facebook.presto.sql.planner.ExpressionInterpreter.verifyExpressionIsConstant;
@@ -93,6 +97,7 @@ public class SqlQueryManager
 
     private final int maxQueryHistory;
     private final Duration minQueryExpireAge;
+    private final int maxQueryLength;
 
     private final ConcurrentMap<QueryId, QueryExecution> queries = new ConcurrentHashMap<>();
     private final Queue<QueryExecution> expirationQueue = new LinkedBlockingQueue<>();
@@ -105,6 +110,7 @@ public class SqlQueryManager
     private final QueryMonitor queryMonitor;
     private final LocationFactory locationFactory;
 
+    private final Metadata metadata;
     private final TransactionManager transactionManager;
 
     private final AccessControl accessControl;
@@ -129,7 +135,8 @@ public class SqlQueryManager
             AccessControl accessControl,
             QueryIdGenerator queryIdGenerator,
             SessionPropertyManager sessionPropertyManager,
-            Map<Class<? extends Statement>, QueryExecutionFactory<?>> executionFactories)
+            Map<Class<? extends Statement>, QueryExecutionFactory<?>> executionFactories,
+            Metadata metadata)
     {
         this.sqlParser = requireNonNull(sqlParser, "sqlParser is null");
 
@@ -146,6 +153,7 @@ public class SqlQueryManager
         this.locationFactory = requireNonNull(locationFactory, "locationFactory is null");
 
         this.transactionManager = requireNonNull(transactionManager, "transactionManager is null");
+        this.metadata = requireNonNull(metadata, "transactionManager is null");
 
         this.accessControl = requireNonNull(accessControl, "accessControl is null");
 
@@ -156,6 +164,7 @@ public class SqlQueryManager
         this.minQueryExpireAge = config.getMinQueryExpireAge();
         this.maxQueryHistory = config.getMaxQueryHistory();
         this.clientTimeout = config.getClientTimeout();
+        this.maxQueryLength = config.getMaxQueryLength();
 
         queryManagementExecutor = Executors.newScheduledThreadPool(config.getQueryManagerExecutorPoolSize(), threadsNamed("query-management-%s"));
         queryManagementExecutorMBean = new ThreadPoolExecutorMBean((ThreadPoolExecutor) queryManagementExecutor);
@@ -272,6 +281,19 @@ public class SqlQueryManager
     }
 
     @Override
+    public Optional<ResourceGroupId> getQueryResourceGroup(QueryId queryId)
+    {
+        requireNonNull(queryId, "queryId is null");
+
+        QueryExecution query = queries.get(queryId);
+        if (query == null) {
+            throw new NoSuchElementException();
+        }
+
+        return query.getResourceGroup();
+    }
+
+    @Override
     public Optional<QueryState> getQueryState(QueryId queryId)
     {
         requireNonNull(queryId, "queryId is null");
@@ -307,6 +329,11 @@ public class SqlQueryManager
         Statement statement;
         try {
             session = sessionSupplier.createSession(queryId, transactionManager, accessControl, sessionPropertyManager);
+            if (query.length() > maxQueryLength) {
+                int queryLength = query.length();
+                query = query.substring(0, maxQueryLength);
+                throw new PrestoException(QUERY_TEXT_TOO_LARGE, format("Query text length (%s) exceeds the maximum length (%s)", queryLength, maxQueryLength));
+            }
 
             Statement wrappedStatement = sqlParser.createStatement(query);
             statement = unwrapExecuteStatement(wrappedStatement, sqlParser, session);
@@ -336,7 +363,11 @@ public class SqlQueryManager
                         .setIdentity(sessionSupplier.getIdentity())
                         .build();
             }
-            QueryExecution execution = new FailedQueryExecution(queryId, query, session, self, transactionManager, queryExecutor, e);
+            Optional<ResourceGroupId> resourceGroup = Optional.empty();
+            if (e instanceof QueryQueueFullException) {
+                resourceGroup = Optional.of(((QueryQueueFullException) e).getResourceGroup());
+            }
+            QueryExecution execution = new FailedQueryExecution(queryId, query, resourceGroup, session, self, transactionManager, queryExecutor, metadata, e);
 
             QueryInfo queryInfo = null;
             try {
@@ -531,17 +562,17 @@ public class SqlQueryManager
                 continue;
             }
 
-            if (isAbandoned(queryExecution)) {
+            if (isAbandoned(queryInfo)) {
                 log.info("Failing abandoned query %s", queryExecution.getQueryId());
                 queryExecution.fail(new PrestoException(ABANDONED_QUERY, format("Query %s has not been accessed since %s: currentTime %s", queryInfo.getQueryId(), queryInfo.getQueryStats().getLastHeartbeat(), DateTime.now())));
             }
         }
     }
 
-    private boolean isAbandoned(QueryExecution query)
+    private boolean isAbandoned(QueryInfo queryInfo)
     {
         DateTime oldestAllowedHeartbeat = DateTime.now().minus(clientTimeout.toMillis());
-        DateTime lastHeartbeat = query.getQueryInfo().getQueryStats().getLastHeartbeat();
+        DateTime lastHeartbeat = queryInfo.getQueryStats().getLastHeartbeat();
 
         return lastHeartbeat != null && lastHeartbeat.isBefore(oldestAllowedHeartbeat);
     }

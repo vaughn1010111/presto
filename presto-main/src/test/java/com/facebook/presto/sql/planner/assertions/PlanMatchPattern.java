@@ -22,10 +22,12 @@ import com.facebook.presto.sql.planner.Symbol;
 import com.facebook.presto.sql.planner.plan.AggregationNode;
 import com.facebook.presto.sql.planner.plan.ApplyNode;
 import com.facebook.presto.sql.planner.plan.ExceptNode;
+import com.facebook.presto.sql.planner.plan.ExchangeNode;
 import com.facebook.presto.sql.planner.plan.FilterNode;
 import com.facebook.presto.sql.planner.plan.GroupIdNode;
 import com.facebook.presto.sql.planner.plan.IntersectNode;
 import com.facebook.presto.sql.planner.plan.JoinNode;
+import com.facebook.presto.sql.planner.plan.LimitNode;
 import com.facebook.presto.sql.planner.plan.OutputNode;
 import com.facebook.presto.sql.planner.plan.PlanNode;
 import com.facebook.presto.sql.planner.plan.ProjectNode;
@@ -49,7 +51,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.facebook.presto.sql.ExpressionUtils.rewriteQualifiedNamesToSymbolReferences;
+import static com.facebook.presto.sql.ExpressionUtils.rewriteIdentifiersToSymbolReferences;
 import static com.facebook.presto.sql.planner.assertions.MatchResult.NO_MATCH;
 import static com.facebook.presto.sql.planner.assertions.MatchResult.match;
 import static com.facebook.presto.sql.planner.assertions.StrictAssignedSymbolsMatcher.actualAssignments;
@@ -81,6 +83,7 @@ public final class PlanMatchPattern
      * Matches to any tree of nodes with children matching to given source matchers.
      * anyNodeTree(tableScanNode("nation")) - will match to any plan which all leafs contain
      * any node containing table scan from nation table.
+     *
      * @note anyTree does not match zero nodes. E.g. output(anyTree(tableScan)) will NOT match TableScan node followed by OutputNode.
      */
     public static PlanMatchPattern anyTree(PlanMatchPattern... sources)
@@ -232,7 +235,12 @@ public final class PlanMatchPattern
                 new JoinMatcher(
                         joinType,
                         expectedEquiCriteria,
-                        expectedFilter.map(predicate -> rewriteQualifiedNamesToSymbolReferences(new SqlParser().createExpression(predicate)))));
+                        expectedFilter.map(predicate -> rewriteIdentifiersToSymbolReferences(new SqlParser().createExpression(predicate)))));
+    }
+
+    public static PlanMatchPattern exchange(PlanMatchPattern... sources)
+    {
+        return node(ExchangeNode.class, sources);
     }
 
     public static PlanMatchPattern union(PlanMatchPattern... sources)
@@ -262,7 +270,7 @@ public final class PlanMatchPattern
 
     public static PlanMatchPattern filter(String predicate, PlanMatchPattern source)
     {
-        Expression expectedPredicate = rewriteQualifiedNamesToSymbolReferences(new SqlParser().createExpression(predicate));
+        Expression expectedPredicate = rewriteIdentifiersToSymbolReferences(new SqlParser().createExpression(predicate));
         return node(FilterNode.class, source).with(new FilterMatcher(expectedPredicate));
     }
 
@@ -286,6 +294,11 @@ public final class PlanMatchPattern
         values.entrySet().forEach(
                 alias -> result.withAlias(alias.getKey(), new ValuesMatcher(alias.getValue())));
         return result;
+    }
+
+    public static PlanMatchPattern limit(long limit, PlanMatchPattern source)
+    {
+        return node(LimitNode.class, source).with(new LimitMatcher(limit));
     }
 
     public PlanMatchPattern(List<PlanMatchPattern> sourcePatterns)

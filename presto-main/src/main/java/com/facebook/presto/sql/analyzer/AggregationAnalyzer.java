@@ -32,6 +32,7 @@ import com.facebook.presto.sql.tree.ExpressionTreeRewriter;
 import com.facebook.presto.sql.tree.Extract;
 import com.facebook.presto.sql.tree.FieldReference;
 import com.facebook.presto.sql.tree.FunctionCall;
+import com.facebook.presto.sql.tree.Identifier;
 import com.facebook.presto.sql.tree.IfExpression;
 import com.facebook.presto.sql.tree.InListExpression;
 import com.facebook.presto.sql.tree.InPredicate;
@@ -46,7 +47,6 @@ import com.facebook.presto.sql.tree.NotExpression;
 import com.facebook.presto.sql.tree.NullIfExpression;
 import com.facebook.presto.sql.tree.Parameter;
 import com.facebook.presto.sql.tree.QualifiedName;
-import com.facebook.presto.sql.tree.QualifiedNameReference;
 import com.facebook.presto.sql.tree.Row;
 import com.facebook.presto.sql.tree.SearchedCaseExpression;
 import com.facebook.presto.sql.tree.SimpleCaseExpression;
@@ -73,7 +73,6 @@ import static com.facebook.presto.sql.analyzer.SemanticErrorCode.NESTED_AGGREGAT
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.NESTED_WINDOW;
 import static com.facebook.presto.sql.analyzer.SemanticErrorCode.NOT_SUPPORTED;
 import static com.facebook.presto.util.ImmutableCollectors.toImmutableList;
-import static com.facebook.presto.util.Types.checkType;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static java.util.Objects.requireNonNull;
@@ -123,11 +122,11 @@ class AggregationAnalyzer
         // in the group by clause to fields they reference so that the expansion from '*' can be matched against them
         for (Expression expression : Iterables.filter(expressions, columnReferences::contains)) {
             QualifiedName name;
-            if (expression instanceof QualifiedNameReference) {
-                name = ((QualifiedNameReference) expression).getName();
+            if (expression instanceof Identifier) {
+                name = QualifiedName.of(((Identifier) expression).getName());
             }
             else {
-                name = DereferenceExpression.getQualifiedName(checkType(expression, DereferenceExpression.class, "expression"));
+                name = DereferenceExpression.getQualifiedName((DereferenceExpression) expression);
             }
 
             List<Field> fields = scope.getRelationType().resolveFields(name);
@@ -383,9 +382,9 @@ class AggregationAnalyzer
         }
 
         @Override
-        protected Boolean visitQualifiedNameReference(QualifiedNameReference node, Void context)
+        protected Boolean visitIdentifier(Identifier node, Void context)
         {
-            return isField(node.getName());
+            return isField(QualifiedName.of(node.getName()));
         }
 
         @Override

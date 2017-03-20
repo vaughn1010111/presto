@@ -12,8 +12,8 @@ env:
     - TEST_SPECIFIC_MODULES=presto-raptor
     - TEST_SPECIFIC_MODULES=presto-accumulo
     - TEST_SPECIFIC_MODULES=presto-cassandra
-    - TEST_SPECIFIC_MODULES=presto-hive,presto-kafka,presto-mysql,presto-postgresql,presto-redis
-    - TEST_OTHER_MODULES=!presto-tests,!presto-raptor,!presto-accumulo,!presto-cassandra,!presto-hive,!presto-kafka,!presto-mysql,!presto-postgresql,!presto-redis,!presto-docs,!presto-server,!presto-server-rpm
+    - TEST_SPECIFIC_MODULES=presto-hive
+    - TEST_OTHER_MODULES=!presto-tests,!presto-raptor,!presto-accumulo,!presto-cassandra,!presto-hive,!presto-docs,!presto-server,!presto-server-rpm
     - PRODUCT_TESTS=true
     - HIVE_TESTS=true
 
@@ -26,10 +26,6 @@ cache:
 
 services:
   - docker
-
-before_install:
-  # This is needed until Travis #4629 is fixed (https://github.com/travis-ci/travis-ci/issues/4629)
-  - sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
 
 install:
   - ./mvnw -v
@@ -66,7 +62,7 @@ script:
   - |
     if [[ -v PRODUCT_TESTS ]]; then
       presto-product-tests/bin/run_on_docker.sh \
-        multinode -x quarantine,big_query,storage_formats,profile_specific_tests
+        multinode -x quarantine,big_query,storage_formats,profile_specific_tests,tpcds
     fi
   - |
     if [[ -v PRODUCT_TESTS ]]; then
